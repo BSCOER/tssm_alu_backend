@@ -3089,11 +3089,22 @@ def forgot_password():
         if not email:
             return jsonify({'error': 'Email is required'}), 400
         
+        # Validate email format
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            return jsonify({'error': 'Invalid email format'}), 400
+        
         # Check if user exists
         user = db.users.find_one({'email': email})
         if not user:
-            # Don't reveal if user exists or not for security
-            return jsonify({'message': 'If an account exists with this email, you will receive a password reset code'}), 200
+            # For security, we return success but don't send email
+            # This prevents email enumeration attacks
+            app.logger.info(f"Password reset attempted for non-existent email: {email}")
+            return jsonify({
+                'message': 'If an account exists with this email, you will receive a password reset code',
+                'email_sent': False  # Frontend can use this internally but shouldn't show to user
+            }), 200
         
         # Generate OTP
         otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
@@ -3108,7 +3119,7 @@ def forgot_password():
         })
         
         # Send email with OTP
-        send_email_async(
+        email_sent = send_email_async(
             'Password Reset Request',
             f'<p>You requested to reset your password.</p>'
             f'<p>Your password reset code is: <strong style="font-size: 24px; color: #667eea;">{otp}</strong></p>'
@@ -3117,7 +3128,10 @@ def forgot_password():
             email
         )
         
-        return jsonify({'message': 'If an account exists with this email, you will receive a password reset code'}), 200
+        return jsonify({
+            'message': 'If an account exists with this email, you will receive a password reset code',
+            'email_sent': True
+        }), 200
         
     except Exception as e:
         app.logger.error(f"Error in forgot_password: {str(e)}")
