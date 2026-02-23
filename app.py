@@ -4053,6 +4053,14 @@ try:
 except Exception as e:
     app.logger.error(f"Error registering comments blueprint: {str(e)}")
 
+# Import and register analytics blueprint
+try:
+    from routes.analytics import analytics_bp
+    app.register_blueprint(analytics_bp)
+    app.logger.info("Analytics blueprint registered successfully")
+except Exception as e:
+    app.logger.error(f"Error registering analytics blueprint: {str(e)}")
+
 if __name__ == '__main__':
     # List registered routes for debugging
     print("\n=== Registered Routes ===")
