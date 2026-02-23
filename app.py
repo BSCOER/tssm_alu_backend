@@ -62,7 +62,7 @@ CORS(app, resources={
             "https://tssm-alu-frontend.vercel.app",
             "https://tssm-alu-frontend-r4rvbq01u-mahesh00234hs-projects.vercel.app",
             "https://tssm-alu-frontend-a3befixrm-mahesh00234hs-projects.vercel.app",
-            "https://bscoer.vercel.app",
+            "https://bscoeralumni.vercel.app",
             
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -4063,3 +4063,4 @@ if __name__ == '__main__':
             print(f"{rule.rule} {rule.methods}")
     print("=== End Routes ===\n")
     app.run(debug=False, host='0.0.0.0', port=5000)
+
