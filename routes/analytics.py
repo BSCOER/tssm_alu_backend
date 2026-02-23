@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 analytics_bp = Blueprint('analytics', __name__)
 
 
-def check_admin():
+def check_admin(db_instance):
     """Check if current user is admin"""
-    from database import db
-    
     current_user_id = get_jwt_identity()
-    user = db.users.find_one({'_id': ObjectId(current_user_id)})
+    user = db_instance.users.find_one({'_id': ObjectId(current_user_id)})
     if not user or not user.get('is_admin', False):
         return False
     return True
@@ -29,10 +27,10 @@ def check_admin():
 def get_user_growth():
     """Get user growth data for line chart (monthly)"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import db
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         # Get data for last 6 months
         now = datetime.now(timezone.utc)
@@ -82,10 +80,10 @@ def get_user_growth():
 def get_category_distribution():
     """Get article category distribution for pie chart"""
     try:
-        if not check_admin():
+        from database import db, news_collection
+        
+        if not check_admin(db):
             return jsonify({'error': 'Admin privileges required'}), 403
-            
-        from database import news_collection
         
         # Aggregate articles by category
         pipeline = [
@@ -121,10 +119,10 @@ def get_category_distribution():
 def get_engagement_metrics():
     """Get engagement metrics for bar chart (views, reactions, comments)"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import news_collection, db
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         # Get data for last 6 months
         now = datetime.now(timezone.utc)
@@ -181,10 +179,10 @@ def get_engagement_metrics():
 def get_alumni_by_year():
     """Get alumni distribution by graduation year for bar chart"""
     try:
-        if not check_admin():
+        from database import db, alumni_collection
+        
+        if not check_admin(db):
             return jsonify({'error': 'Admin privileges required'}), 403
-            
-        from database import alumni_collection
         
         # Aggregate alumni by graduation year
         pipeline = [
@@ -221,10 +219,10 @@ def get_alumni_by_year():
 def get_department_distribution():
     """Get alumni distribution by department for pie chart"""
     try:
-        if not check_admin():
+        from database import db, alumni_collection
+        
+        if not check_admin(db):
             return jsonify({'error': 'Admin privileges required'}), 403
-            
-        from database import alumni_collection
         
         # Aggregate alumni by department
         pipeline = [
@@ -272,10 +270,10 @@ def get_department_distribution():
 def get_recent_activity():
     """Get recent activity feed for dashboard"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import db, news_collection, events_collection
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
@@ -331,10 +329,10 @@ def get_recent_activity():
 def get_stats_summary():
     """Get summary statistics for stat cards"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import db, news_collection
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
@@ -396,10 +394,10 @@ def get_stats_summary():
 def get_top_articles():
     """Get top performing articles by views and reactions"""
     try:
-        if not check_admin():
+        from database import db, news_collection
+        
+        if not check_admin(db):
             return jsonify({'error': 'Admin privileges required'}), 403
-            
-        from database import news_collection
         
         # Get top 10 articles by views
         top_by_views = list(news_collection.find(
@@ -449,10 +447,10 @@ def get_top_articles():
 def get_user_activity_heatmap():
     """Get user activity heatmap data (day of week and hour)"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import db
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         # Get all user logins from last 30 days
         now = datetime.now(timezone.utc)
@@ -492,10 +490,10 @@ def get_user_activity_heatmap():
 def get_content_performance():
     """Get content performance metrics"""
     try:
-        if not check_admin():
-            return jsonify({'error': 'Admin privileges required'}), 403
-            
         from database import news_collection, db
+        
+        if not check_admin(db):
+            return jsonify({'error': 'Admin privileges required'}), 403
         
         # Average views per article
         pipeline_views = [
