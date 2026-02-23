@@ -1,0 +1,2 @@
+2026-02-16 06:23:48,100 INFO: Alumni API startup [in D:\tssm_alumani\backend\tssm_alu_backend\app.py:95]
+2026-02-16 06:23:48,102 ERROR: MONGODB_URI not set in environment variables! [in D:\tssm_alumani\backend\tssm_alu_backend\app.py:118]
