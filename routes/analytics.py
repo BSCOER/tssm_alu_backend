@@ -3,16 +3,9 @@ Analytics API endpoints for admin dashboard
 Provides data for charts and visualizations
 """
 from flask import Blueprint, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
-import sys
-import os
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from utils.decorators import admin_required
-from database import db, news_collection, alumni_collection, events_collection, jobs_collection
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,11 +13,27 @@ logger = logging.getLogger(__name__)
 analytics_bp = Blueprint('analytics', __name__)
 
 
+def check_admin():
+    """Check if current user is admin"""
+    from database import db
+    
+    current_user_id = get_jwt_identity()
+    user = db.users.find_one({'_id': ObjectId(current_user_id)})
+    if not user or not user.get('is_admin', False):
+        return False
+    return True
+
+
 @analytics_bp.route('/api/v1/admin/analytics/user-growth', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_user_growth():
     """Get user growth data for line chart (monthly)"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import db
+        
         # Get data for last 6 months
         now = datetime.now(timezone.utc)
         months_data = []
@@ -69,10 +78,15 @@ def get_user_growth():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/category-distribution', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_category_distribution():
     """Get article category distribution for pie chart"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import news_collection
+        
         # Aggregate articles by category
         pipeline = [
             {'$match': {'status': 'approved'}},
@@ -103,10 +117,15 @@ def get_category_distribution():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/engagement-metrics', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_engagement_metrics():
     """Get engagement metrics for bar chart (views, reactions, comments)"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import news_collection, db
+        
         # Get data for last 6 months
         now = datetime.now(timezone.utc)
         months_data = []
@@ -158,10 +177,15 @@ def get_engagement_metrics():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/alumni-by-year', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_alumni_by_year():
     """Get alumni distribution by graduation year for bar chart"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import alumni_collection
+        
         # Aggregate alumni by graduation year
         pipeline = [
             {'$match': {'graduation_year': {'$exists': True, '$ne': None}}},
@@ -193,10 +217,15 @@ def get_alumni_by_year():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/department-distribution', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_department_distribution():
     """Get alumni distribution by department for pie chart"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import alumni_collection
+        
         # Aggregate alumni by department
         pipeline = [
             {'$match': {'department': {'$exists': True, '$ne': None, '$ne': ''}}},
@@ -239,10 +268,15 @@ def get_department_distribution():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/recent-activity', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_recent_activity():
     """Get recent activity feed for dashboard"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import db, news_collection, events_collection
+        
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
         
@@ -293,10 +327,15 @@ def get_recent_activity():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/stats-summary', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_stats_summary():
     """Get summary statistics for stat cards"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import db, news_collection
+        
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
@@ -353,10 +392,15 @@ def get_stats_summary():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/top-articles', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_top_articles():
     """Get top performing articles by views and reactions"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import news_collection
+        
         # Get top 10 articles by views
         top_by_views = list(news_collection.find(
             {'status': 'approved'},
@@ -369,7 +413,26 @@ def get_top_articles():
             {'title': 1, 'views': 1, 'reaction_count': 1, 'submitted_at': 1}
         ).sort('reaction_count', -1).limit(10))
         
-        from utils.helpers import serialize_doc
+        def serialize_doc(doc):
+            if doc is None:
+                return None
+            if isinstance(doc, ObjectId):
+                return str(doc)
+            if isinstance(doc, datetime):
+                return doc.isoformat()
+            if isinstance(doc, list):
+                return [serialize_doc(item) for item in doc]
+            if isinstance(doc, dict):
+                doc = doc.copy()
+                if '_id' in doc:
+                    doc['_id'] = str(doc['_id'])
+                for key, value in doc.items():
+                    if isinstance(value, ObjectId):
+                        doc[key] = str(value)
+                    elif isinstance(value, datetime):
+                        doc[key] = value.isoformat()
+                return doc
+            return doc
         
         return jsonify({
             'top_by_views': serialize_doc(top_by_views),
@@ -382,10 +445,15 @@ def get_top_articles():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/user-activity-heatmap', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_user_activity_heatmap():
     """Get user activity heatmap data (day of week and hour)"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import db
+        
         # Get all user logins from last 30 days
         now = datetime.now(timezone.utc)
         month_ago = now - timedelta(days=30)
@@ -420,10 +488,15 @@ def get_user_activity_heatmap():
 
 
 @analytics_bp.route('/api/v1/admin/analytics/content-performance', methods=['GET'])
-@admin_required
+@jwt_required()
 def get_content_performance():
     """Get content performance metrics"""
     try:
+        if not check_admin():
+            return jsonify({'error': 'Admin privileges required'}), 403
+            
+        from database import news_collection, db
+        
         # Average views per article
         pipeline_views = [
             {'$match': {'status': 'approved'}},
