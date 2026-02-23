@@ -5,6 +5,12 @@ Provides data for charts and visualizations
 from flask import Blueprint, jsonify
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from utils.decorators import admin_required
 from database import db, news_collection, alumni_collection, events_collection, jobs_collection
 import logging
