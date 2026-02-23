@@ -3781,6 +3781,7 @@ def create_gallery_item():
     try:
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
+        event_name = request.form.get('event_name', '').strip()
         year_raw = request.form.get('year', '').strip()
 
         if not title:
@@ -3800,7 +3801,7 @@ def create_gallery_item():
                 upload_result = cloudinary.uploader.upload(
                     file,
                     folder='alumni_gallery',
-                    transformation=[{'width': 1400, 'height': 900, 'crop': 'fill', 'quality': 'auto'}]
+                    transformation=[{'width': 1920, 'height': 1080, 'crop': 'limit', 'quality': 'auto:best'}]
                 )
                 image_url = upload_result.get('secure_url')
 
@@ -3811,6 +3812,7 @@ def create_gallery_item():
         item = {
             'title': title,
             'description': description,
+            'event_name': event_name if event_name else title,
             'year': year,
             'image_url': image_url,
             'created_by': ObjectId(current_user_id),
@@ -3846,6 +3848,8 @@ def update_gallery_item(item_id):
             updates['title'] = str(data.get('title', '')).strip()
         if 'description' in data:
             updates['description'] = str(data.get('description', '')).strip()
+        if 'event_name' in data:
+            updates['event_name'] = str(data.get('event_name', '')).strip()
         if 'year' in data and str(data.get('year')).strip():
             try:
                 updates['year'] = int(str(data.get('year')).strip())
@@ -3858,7 +3862,7 @@ def update_gallery_item(item_id):
                 upload_result = cloudinary.uploader.upload(
                     file,
                     folder='alumni_gallery',
-                    transformation=[{'width': 1400, 'height': 900, 'crop': 'fill', 'quality': 'auto'}]
+                    transformation=[{'width': 1920, 'height': 1080, 'crop': 'limit', 'quality': 'auto:best'}]
                 )
                 updates['image_url'] = upload_result.get('secure_url')
 
