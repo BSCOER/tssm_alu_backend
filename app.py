@@ -1058,20 +1058,26 @@ def resend_otp():
 @app.route(f'/api/{API_VERSION}/auth/login', methods=['POST'])
 @limiter.limit("10 per hour")
 def login():
-    """Login user"""
+    """Login user with email or username"""
     try:
         data = request.get_json()
-        email = data.get('email')
+        identifier = data.get('email')  # Can be email or username
         password = data.get('password')
 
-        if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
+        if not identifier or not password:
+            return jsonify({'error': 'Email/Username and password are required'}), 400
 
-        user = db.users.find_one({'email': email})
+        # Try to find user by email or username
+        user = db.users.find_one({
+            '$or': [
+                {'email': identifier},
+                {'username': identifier}
+            ]
+        })
         
         if not user or not check_password_hash(user['password'], password):
-            app.logger.warning(f"Failed login attempt for email: {email}")
-            return jsonify({'error': 'Invalid email or password'}), 401
+            app.logger.warning(f"Failed login attempt for identifier: {identifier}")
+            return jsonify({'error': 'Invalid email/username or password'}), 401
 
         if not user.get('is_active', True):
             return jsonify({'error': 'Account is deactivated'}), 403
@@ -2336,18 +2342,57 @@ def reject_news(news_id):
 @app.route(f'/api/{API_VERSION}/admin/users', methods=['GET'])
 @admin_required
 def get_all_users():
-    """Get all users (admin only)"""
+    """Get all users with filters (admin only) - excludes pending users"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
         search = request.args.get('search', '')
+        department = request.args.get('department', '')
+        year = request.args.get('year', '')
         
-        query = {}
+        # Exclude pending users - only show approved/rejected/active users
+        query = {'approval_status': {'$ne': 'pending'}}
+        
         if search:
             query['$or'] = [
                 {'username': {'$regex': search, '$options': 'i'}},
                 {'email': {'$regex': search, '$options': 'i'}}
             ]
+        
+        # Get user IDs based on department/year filters from alumni collection
+        if department or year:
+            alumni_query = {}
+            if department:
+                alumni_query['department'] = department
+            if year:
+                alumni_query['graduation_year'] = int(year)
+            
+            matching_alumni = list(alumni_collection.find(alumni_query, {'user_id': 1}))
+            user_ids = [ObjectId(a['user_id']) for a in matching_alumni if a.get('user_id')]
+            
+            if user_ids:
+                if '$or' in query:
+                    # Combine with search query
+                    query = {
+                        '$and': [
+                            {'_id': {'$in': user_ids}},
+                            {'approval_status': {'$ne': 'pending'}},
+                            {'$or': query['$or']}
+                        ]
+                    }
+                else:
+                    query['_id'] = {'$in': user_ids}
+            else:
+                # No matching alumni found
+                return jsonify({
+                    'users': [],
+                    'pagination': {
+                        'page': page,
+                        'per_page': per_page,
+                        'total': 0,
+                        'pages': 0
+                    }
+                }), 200
         
         total = db.users.count_documents(query)
         users = list(
@@ -2357,7 +2402,7 @@ def get_all_users():
             .limit(per_page)
         )
         
-        # Remove passwords
+        # Remove passwords and add alumni profile info
         for user in users:
             user.pop('password', None)
             
@@ -2386,7 +2431,7 @@ def get_all_users():
 @app.route(f'/api/{API_VERSION}/admin/users/<user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
-    """Delete a user (admin only)"""
+    """Delete a user (admin only) - cannot delete supreme admin"""
     try:
         try:
             obj_id = ObjectId(user_id)
@@ -2396,6 +2441,14 @@ def delete_user(user_id):
         # Don't allow deleting yourself
         if str(obj_id) == get_jwt_identity():
             return jsonify({'error': 'Cannot delete your own account'}), 400
+        
+        # Check if target user is supreme admin
+        target_user = db.users.find_one({'_id': obj_id})
+        if not target_user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if target_user.get('is_supreme_admin', False):
+            return jsonify({'error': 'Cannot delete supreme admin'}), 403
         
         # Delete user
         result = db.users.delete_one({'_id': obj_id})
@@ -2452,6 +2505,69 @@ def create_user_admin():
             'message': 'User created successfully',
             'user_id': str(result.inserted_id)
         }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route(f'/api/{API_VERSION}/admin/users/<user_id>/toggle-admin', methods=['PUT'])
+@admin_required
+def toggle_admin_status(user_id):
+    """Toggle admin status for a user - cannot modify supreme admin"""
+    try:
+        try:
+            obj_id = ObjectId(user_id)
+        except Exception:
+            return jsonify({'error': 'Invalid user id'}), 400
+        
+        # Get target user
+        target_user = db.users.find_one({'_id': obj_id})
+        if not target_user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Cannot modify supreme admin
+        if target_user.get('is_supreme_admin', False):
+            return jsonify({'error': 'Cannot modify supreme admin status'}), 403
+        
+        # Toggle admin status
+        new_admin_status = not target_user.get('is_admin', False)
+        
+        db.users.update_one(
+            {'_id': obj_id},
+            {'$set': {'is_admin': new_admin_status}}
+        )
+        
+        cache.clear()
+        
+        return jsonify({
+            'message': f'User {"promoted to" if new_admin_status else "demoted from"} admin successfully',
+            'is_admin': new_admin_status
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route(f'/api/{API_VERSION}/admin/set-supreme-admin', methods=['POST'])
+@admin_required
+def set_supreme_admin():
+    """Set the current admin as supreme admin (can only be done once)"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Check if supreme admin already exists
+        existing_supreme = db.users.find_one({'is_supreme_admin': True})
+        if existing_supreme:
+            return jsonify({'error': 'Supreme admin already exists'}), 400
+        
+        # Set current user as supreme admin
+        db.users.update_one(
+            {'_id': ObjectId(current_user_id)},
+            {'$set': {'is_supreme_admin': True, 'is_admin': True}}
+        )
+        
+        cache.clear()
+        app.logger.info(f"Supreme admin set: {current_user_id}")
+        
+        return jsonify({'message': 'You are now the supreme admin'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2822,17 +2938,58 @@ def get_admin_stats():
 @app.route(f'/api/{API_VERSION}/admin/users/export', methods=['GET'])
 @admin_required
 def export_users_csv():
-    """Export all users data as CSV (admin only)"""
+    """Export users data as CSV with filters (admin only) - excludes pending users"""
     try:
         search = request.args.get('search', '')
+        department = request.args.get('department', '')
+        year = request.args.get('year', '')
         
-        # Build query
-        query = {}
+        # Exclude pending users
+        query = {'approval_status': {'$ne': 'pending'}}
+        
         if search:
             query['$or'] = [
                 {'username': {'$regex': search, '$options': 'i'}},
                 {'email': {'$regex': search, '$options': 'i'}}
             ]
+        
+        # Get user IDs based on department/year filters from alumni collection
+        if department or year:
+            alumni_query = {}
+            if department:
+                alumni_query['department'] = department
+            if year:
+                alumni_query['graduation_year'] = int(year)
+            
+            matching_alumni = list(alumni_collection.find(alumni_query, {'user_id': 1}))
+            user_ids = [ObjectId(a['user_id']) for a in matching_alumni if a.get('user_id')]
+            
+            if user_ids:
+                if '$or' in query:
+                    # Combine with search query
+                    query = {
+                        '$and': [
+                            {'_id': {'$in': user_ids}},
+                            {'approval_status': {'$ne': 'pending'}},
+                            {'$or': query['$or']}
+                        ]
+                    }
+                else:
+                    query['_id'] = {'$in': user_ids}
+            else:
+                # No matching alumni found - return empty CSV
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow([
+                    'ID', 'Username', 'Email', 'Full Name', 'Department', 
+                    'Graduation Year', 'Phone', 'Role', 'Approval Status', 'Created At'
+                ])
+                output.seek(0)
+                from flask import make_response
+                response = make_response(output.getvalue())
+                response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+                response.headers['Content-Disposition'] = f'attachment; filename=users_export_{datetime.now(timezone.utc).strftime("%Y-%m-%d")}.csv'
+                return response
         
         # Fetch all users
         users = list(db.users.find(query).sort('created_at', DESCENDING))
@@ -2872,9 +3029,19 @@ def export_users_csv():
         from flask import make_response
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-        response.headers['Content-Disposition'] = f'attachment; filename=users_export_{datetime.now(timezone.utc).strftime("%Y-%m-%d")}.csv'
         
-        app.logger.info(f"Users CSV export requested by admin: {get_jwt_identity()}")
+        # Add filter info to filename
+        filename_parts = ['users_export']
+        if department:
+            filename_parts.append(f'dept_{department}')
+        if year:
+            filename_parts.append(f'year_{year}')
+        filename_parts.append(datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        filename = '_'.join(filename_parts) + '.csv'
+        
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        app.logger.info(f"Users CSV export requested by admin: {get_jwt_identity()} with filters - dept: {department}, year: {year}")
         
         return response
     except Exception as e:
