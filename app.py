@@ -1108,7 +1108,7 @@ def login():
         # Check if alumni profile exists
         alumni_profile = alumni_collection.find_one({'user_id': str(user['_id'])})
 
-        app.logger.info(f"User logged in: {email}")
+        app.logger.info(f"User logged in: {identifier}")
 
         return jsonify({
             'message': 'Login successful',
