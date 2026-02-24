@@ -3744,9 +3744,17 @@ def get_achievement_reactions(achievement_id):
             return jsonify({'error': 'Achievement not found'}), 404
 
         reactions = achievement.get('reactions', {})
-        current_user_id = get_jwt_identity() if request.headers.get('Authorization') else None
+        
+        # Make JWT optional
+        current_user_id = None
+        if request.headers.get('Authorization'):
+            try:
+                verify_jwt_in_request(optional=True)
+                current_user_id = get_jwt_identity()
+            except Exception:
+                pass
+        
         user_reaction = None
-
         if current_user_id:
             for rtype in ['like', 'love', 'celebrate']:
                 if current_user_id in reactions.get(rtype, []):
