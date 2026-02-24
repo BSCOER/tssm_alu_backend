@@ -2365,7 +2365,8 @@ def get_all_users():
         if department or year:
             alumni_query = {}
             if department:
-                alumni_query['department'] = department
+                # Use case-insensitive regex for department matching
+                alumni_query['department'] = {'$regex': f'^{department}$', '$options': 'i'}
             if year:
                 alumni_query['graduation_year'] = year
             
@@ -2966,7 +2967,8 @@ def export_users_csv():
         if department or year:
             alumni_query = {}
             if department:
-                alumni_query['department'] = department
+                # Use case-insensitive regex for department matching
+                alumni_query['department'] = {'$regex': f'^{department}$', '$options': 'i'}
             if year:
                 alumni_query['graduation_year'] = year
             
