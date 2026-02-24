@@ -855,6 +855,9 @@ def register():
         if not all([username, email, password, full_name]):
             return jsonify({'error': 'Username, email, password, and full name are required'}), 400
 
+        if not department:
+            return jsonify({'error': 'Department is required'}), 400
+
         if len(password) < 8:
             return jsonify({'error': 'Password must be at least 8 characters'}), 400
 
