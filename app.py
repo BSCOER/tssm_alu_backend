@@ -2348,7 +2348,9 @@ def get_all_users():
         per_page = request.args.get('per_page', 50, type=int)
         search = request.args.get('search', '')
         department = request.args.get('department', '')
-        year = request.args.get('year', '')
+        year = request.args.get('year', type=int)
+        
+        app.logger.info(f"User filter request - department: {department}, year: {year}, search: {search}")
         
         # Exclude pending users - only show approved/rejected/active users
         query = {'approval_status': {'$ne': 'pending'}}
@@ -2365,9 +2367,13 @@ def get_all_users():
             if department:
                 alumni_query['department'] = department
             if year:
-                alumni_query['graduation_year'] = int(year)
+                alumni_query['graduation_year'] = year
+            
+            app.logger.info(f"Alumni query: {alumni_query}")
             
             matching_alumni = list(alumni_collection.find(alumni_query, {'user_id': 1}))
+            app.logger.info(f"Found {len(matching_alumni)} matching alumni")
+            
             user_ids = [ObjectId(a['user_id']) for a in matching_alumni if a.get('user_id')]
             
             if user_ids:
@@ -2425,6 +2431,7 @@ def get_all_users():
             }
         }), 200
     except Exception as e:
+        app.logger.error(f"Get all users error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -2942,7 +2949,9 @@ def export_users_csv():
     try:
         search = request.args.get('search', '')
         department = request.args.get('department', '')
-        year = request.args.get('year', '')
+        year = request.args.get('year', type=int)
+        
+        app.logger.info(f"CSV export request - department: {department}, year: {year}, search: {search}")
         
         # Exclude pending users
         query = {'approval_status': {'$ne': 'pending'}}
@@ -2959,7 +2968,7 @@ def export_users_csv():
             if department:
                 alumni_query['department'] = department
             if year:
-                alumni_query['graduation_year'] = int(year)
+                alumni_query['graduation_year'] = year
             
             matching_alumni = list(alumni_collection.find(alumni_query, {'user_id': 1}))
             user_ids = [ObjectId(a['user_id']) for a in matching_alumni if a.get('user_id')]
