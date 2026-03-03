@@ -62,7 +62,7 @@ CORS(app, resources={
             
             "https://bscoeralumni.vercel.app",
             "https://bscoer.vercel.app",
-            
+            "https://bscoeralumni.tech",
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
@@ -4721,6 +4721,7 @@ if __name__ == '__main__':
             print(f"{rule.rule} {rule.methods}")
     print("=== End Routes ===\n")
     app.run(debug=False, host='0.0.0.0', port=5000)
+
 
 
 
